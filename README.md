@@ -1,6 +1,111 @@
-# kbgen — distribution bundle
+# kbgen
 
-Three pre-built Docker images shipped together:
+AI-powered KB generation for ITSM platforms. One Docker image serves both
+a FastAPI backend and a React SPA on port **8004**. Polls resolved tickets,
+drafts articles with OpenAI, routes them through HITL review, and pushes
+approved drafts back to the ITSM.
+
+**Repo**: https://github.com/beedev/kbgen
+
+---
+
+## Install from Docker (Linux)
+
+The fastest path: clone the repo, build locally, and run with the bundled
+GLPI + seed data. You provide only an external **Postgres** (with
+`pgvector`) and an **OpenAI API key**.
+
+### 1. Prereqs
+
+```bash
+# Docker + Compose V2
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER && newgrp docker
+
+# git
+sudo apt install -y git jq   # or: sudo dnf install -y git jq
+```
+
+### 2. Clone + configure
+
+```bash
+git clone https://github.com/beedev/kbgen.git
+cd kbgen
+cp .env.example .env
+```
+
+Edit `.env` — only two required values:
+
+```dotenv
+DATABASE_URL=postgresql+asyncpg://kbgen:<password>@<pg-host>:5432/kbgen
+OPENAI_API_KEY=sk-proj-...
+```
+
+Don't have Postgres handy? Spin one up on the same box:
+
+```bash
+docker run -d --name kbgen-pg \
+  -p 5432:5432 \
+  -e POSTGRES_DB=kbgen -e POSTGRES_USER=kbgen -e POSTGRES_PASSWORD=kbgen_dev \
+  -v kbgen-pg-data:/var/lib/postgresql/data \
+  pgvector/pgvector:pg16
+
+sleep 5
+docker exec kbgen-pg psql -U kbgen -c \
+  'CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pgcrypto;'
+```
+
+Then point `.env` at it:
+```dotenv
+# Linux (native Docker): use the host's LAN IP or add host-gateway mapping
+DATABASE_URL=postgresql+asyncpg://kbgen:kbgen_dev@host.docker.internal:5432/kbgen
+```
+
+### 3. Build + run
+
+```bash
+docker compose up -d --build
+```
+
+`--build` triggers a first-time multi-stage build (~2 min): Node stage
+builds the SPA, Python stage installs deps and copies the bundle into
+place. Subsequent `docker compose up -d` is ~10 s.
+
+The stack starts:
+- `kbgen-glpi-db`  — MariaDB for GLPI
+- `kbgen-glpi`     — GLPI (self-installs on first boot; REST API enabled)
+- `kbgen-app`      — kbgen on port 8004
+
+First boot takes ~60 s for GLPI install + kbgen auto-seeding 135
+healthcare demo tickets into the freshly-installed GLPI.
+
+### 4. Verify
+
+```bash
+curl -s http://localhost:8004/api/health | jq .
+# expect {"status":"ok","db":"ok","itsm":"ok","openai":"ok"}
+
+curl -s http://localhost:8004/api/kb/stats | jq .
+# tickets_processed: 135 (or climbing as the scheduler runs)
+```
+
+Open **http://\<host\>:8004** in a browser.
+
+### 5. Force the first poll if you don't want to wait 60 s
+
+```bash
+curl -X POST http://localhost:8004/api/kb/poll/run
+```
+
+---
+
+## Install from a pre-built image bundle (air-gapped)
+
+For sites without internet access to the GitHub repo or to Docker Hub.
+Someone on a connected machine exports a tarball; the recipient
+`docker load`s it.
+
+### Three pre-built Docker images shipped together:
 
 | Image | Size | What's inside |
 |---|---|---|
