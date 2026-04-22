@@ -22,12 +22,16 @@ export function SystemStatus() {
   const [pollInterval, setPollInterval] = useState<number | undefined>();
   const [dedupThreshold, setDedupThreshold] = useState<number | undefined>();
   const [model, setModel] = useState<string | undefined>();
+  const [minResolutionChars, setMinResolutionChars] = useState<number | undefined>();
+  const [thinnessThresholdChars, setThinnessThresholdChars] = useState<number | undefined>();
 
   React.useEffect(() => {
     if (settings) {
       setPollInterval(settings.poll_interval_s);
       setDedupThreshold(settings.dedup_threshold);
       setModel(settings.openai_model);
+      setMinResolutionChars(settings.min_resolution_chars);
+      setThinnessThresholdChars(settings.thinness_threshold_chars);
     }
   }, [settings?.updated_at]);
 
@@ -41,6 +45,8 @@ export function SystemStatus() {
       poll_interval_s: pollInterval,
       dedup_threshold: dedupThreshold,
       openai_model: model,
+      min_resolution_chars: minResolutionChars,
+      thinness_threshold_chars: thinnessThresholdChars,
     });
     await refetch();
   };
@@ -165,6 +171,41 @@ export function SystemStatus() {
                 value={model ?? ''}
                 onChange={(e) => setModel(e.target.value)}
               />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[var(--kbgen-text-secondary)]">
+                Min resolution chars
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={500}
+                className="mt-1 w-full rounded-md border border-[var(--kbgen-border)] p-2 text-sm"
+                value={minResolutionChars ?? ''}
+                onChange={(e) => setMinResolutionChars(Number(e.target.value))}
+              />
+              <p className="text-[10px] text-[var(--kbgen-text-muted)] mt-1 leading-snug">
+                Below this length, resolution text is considered absent → ticket marked
+                SKIPPED (gap). Lower to skip fewer tickets; raise to be stricter.
+              </p>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[var(--kbgen-text-secondary)]">
+                Thinness threshold (chars)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={2000}
+                className="mt-1 w-full rounded-md border border-[var(--kbgen-border)] p-2 text-sm"
+                value={thinnessThresholdChars ?? ''}
+                onChange={(e) => setThinnessThresholdChars(Number(e.target.value))}
+              />
+              <p className="text-[10px] text-[var(--kbgen-text-muted)] mt-1 leading-snug">
+                Accuracy dampening band. Resolutions below this length take up to 25%
+                Accuracy penalty (linear from 0 → threshold). Set to 0 to disable
+                dampening entirely.
+              </p>
             </div>
           </div>
           <div>

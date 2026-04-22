@@ -23,15 +23,20 @@ def score(
     draft: ArticleDraft,
     nearest_neighbour_relevance: float | None,
     weights: dict[str, float] | None = None,
+    thinness_threshold_chars: int = 120,
 ) -> HealthScore:
     w = {"accuracy": 0.5, "recency": 0.2, "coverage": 0.3}
     if weights:
         w.update(weights)
 
     # Accuracy: trust the model's self-rated confidence, dampened when the ticket's
-    # resolution notes were thin.
+    # resolution notes were thin. The threshold is configurable per-tenant via
+    # kb.settings.thinness_threshold_chars.
     resolution_len = len(ticket.resolution or "")
-    thinness_penalty = 0.0 if resolution_len >= 120 else (1 - resolution_len / 120) * 0.25
+    if resolution_len >= thinness_threshold_chars or thinness_threshold_chars <= 0:
+        thinness_penalty = 0.0
+    else:
+        thinness_penalty = (1 - resolution_len / thinness_threshold_chars) * 0.25
     accuracy = _clip(draft.confidence - thinness_penalty)
 
     # Recency: 1 when resolved today, decays linearly over 365 days.

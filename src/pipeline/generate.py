@@ -36,9 +36,6 @@ async def _load_settings(db: AsyncSession) -> KbSettings:
     return row
 
 
-MIN_RESOLUTION_CHARS = 20
-
-
 async def process_ticket(db: AsyncSession, ticket: Ticket) -> dict:
     """Single-ticket pipeline. Returns a small status dict for the cycle summary."""
     # Allow retry of tickets that were previously SKIPPED (resolution might have
@@ -51,7 +48,8 @@ async def process_ticket(db: AsyncSession, ticket: Ticket) -> dict:
 
     # Gap material: tickets without useful resolution notes can't be drafted
     # honestly. Record them as SKIPPED so the Topics view can surface the gap.
-    if len((ticket.resolution or "").strip()) < MIN_RESOLUTION_CHARS:
+    min_chars = int(settings.min_resolution_chars or 20)
+    if len((ticket.resolution or "").strip()) < min_chars:
         await tickets_dal.record(
             db,
             itsm_ticket_id=ticket.itsm_ticket_id,
@@ -90,6 +88,7 @@ async def process_ticket(db: AsyncSession, ticket: Ticket) -> dict:
         draft=draft,
         nearest_neighbour_relevance=dedup.matched_relevance,
         weights=settings.score_weights,
+        thinness_threshold_chars=int(settings.thinness_threshold_chars or 120),
     )
 
     row = await articles_dal.create(

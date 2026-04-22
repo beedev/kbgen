@@ -71,6 +71,59 @@ export function ConfidenceScorecard({
           {bar(score.coverage)}
         </div>
       </div>
+
+      {/* Inline legend — always visible so reviewers don't have to hunt for
+          definitions. Keeps the panel self-explanatory. */}
+      <div className="border-t border-[var(--kbgen-border)] pt-3 space-y-2 text-xs text-[var(--kbgen-text-secondary)]">
+        <p className="text-[10px] uppercase tracking-widest text-[var(--kbgen-text-muted)] font-bold">
+          What these mean
+        </p>
+        <dl className="space-y-1.5 leading-snug">
+          <div>
+            <dt className="font-semibold text-[var(--kbgen-text)] inline">Model Confidence</dt>
+            <span> — the LLM's self-rated certainty when it drafted this article.</span>
+          </div>
+          <div>
+            <dt className="font-semibold text-[var(--kbgen-text)] inline">Accuracy</dt>
+            <span> — model confidence, <em>dampened</em> when the source ticket's resolution notes are thin (&lt; 120 chars).</span>
+          </div>
+          <div>
+            <dt className="font-semibold text-[var(--kbgen-text)] inline">Recency</dt>
+            <span> — freshness of the knowledge. 100% = resolved today; decays linearly over 365 days.</span>
+          </div>
+          <div>
+            <dt className="font-semibold text-[var(--kbgen-text)] inline">Coverage novelty</dt>
+            <span> — how different this draft is from indexed KB. <strong>Low = near-duplicate</strong> — consider merging instead of publishing.</span>
+          </div>
+          <div>
+            <dt className="font-semibold text-[var(--kbgen-text)] inline">Overall Health</dt>
+            <span> — weighted sum: <code>accuracy × 0.5 + recency × 0.2 + coverage × 0.3</code>. Weights tunable in Admin → System Status.</span>
+          </div>
+        </dl>
+        <div className="pt-2 text-[var(--kbgen-text-muted)] border-t border-[var(--kbgen-border-light)] space-y-1">
+          <p>
+            <strong>Rule of thumb — read the Overall Health number:</strong>
+          </p>
+          <ul className="space-y-0.5 pl-3">
+            <li>
+              <strong className="text-[var(--kbgen-success)]">≥ 80%</strong> — safe to approve &amp; push
+            </li>
+            <li>
+              <strong className="text-[var(--kbgen-brand)]">60–80%</strong> — read carefully, usually approvable with minor edits
+            </li>
+            <li>
+              <strong className="text-[var(--kbgen-warning)]">40–60%</strong> — scrutinize; one of the sub-scores is flagging something
+            </li>
+            <li>
+              <strong className="text-[var(--kbgen-danger)]">&lt; 40%</strong> — consider rejecting
+            </li>
+          </ul>
+          <p className="pt-1">
+            The sub-scores (Accuracy / Recency / Coverage) tell you <em>why</em> Overall
+            landed where it did, not whether to publish on their own.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

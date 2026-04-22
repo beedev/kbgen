@@ -6,12 +6,13 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.indexing.indexer import index_article
 from src.itsm import get_adapter
 from src.storage import articles as articles_dal
-from src.storage.models import PushLog
+from src.storage.models import ProcessedTicket, PushLog
 
 log = logging.getLogger(__name__)
 
@@ -72,8 +73,38 @@ async def push_draft(db: AsyncSession, draft_id: UUID, *, reviewer: str | None =
     n_chunks = await index_article(
         db, article_id=article.id, title=article.title, body=article.steps_md or ""
     )
+
+    # Link the KB article to every ticket it answers — master + covered siblings
+    # — so each ticket's "Knowledge Base" tab in the ITSM lists the article.
+    # Non-fatal: the push is already durable at this point.
+    ticket_ids: list[str] = []
+    if article.source_ticket_id:
+        ticket_ids.append(str(article.source_ticket_id))
+    covered_rows = (
+        await db.execute(
+            select(ProcessedTicket.itsm_ticket_id).where(
+                ProcessedTicket.matched_article_id == article.id
+            )
+        )
+    ).scalars().all()
+    for tid in covered_rows:
+        if tid and tid not in ticket_ids:
+            ticket_ids.append(str(tid))
+
+    linked = 0
+    for tid in ticket_ids:
+        try:
+            ok = await adapter.link_kb_to_ticket(itsm_kb_id=itsm_kb_id, itsm_ticket_id=tid)
+            if ok:
+                linked += 1
+        except Exception as exc:
+            log.warning(
+                "link_kb_to_ticket failed kb=%s ticket=%s: %s", itsm_kb_id, tid, exc
+            )
+
     return {
         "article_id": str(article.id),
         "itsm_kb_id": itsm_kb_id,
         "indexed_chunks": n_chunks,
+        "linked_tickets": linked,
     }

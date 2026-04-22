@@ -41,7 +41,7 @@ async def test_above_threshold_marks_covered(monkeypatch):
             total=1,
         )
 
-    monkeypatch.setattr(dedup, "semantic_search", fake_search)
+    monkeypatch.setattr(dedup, "semantic_search_for_dedup", fake_search)
 
     t = Ticket(itsm_ticket_id="1", itsm_provider="x", title="reset vpn")
     result = await dedup.check_duplicate(_StubSession(), t, threshold=0.82)
@@ -69,7 +69,7 @@ async def test_below_threshold_is_novel(monkeypatch):
             total=1,
         )
 
-    monkeypatch.setattr(dedup, "semantic_search", fake_search)
+    monkeypatch.setattr(dedup, "semantic_search_for_dedup", fake_search)
 
     t = Ticket(itsm_ticket_id="2", itsm_provider="x", title="something novel")
     result = await dedup.check_duplicate(_StubSession(), t, threshold=0.82)
@@ -82,7 +82,7 @@ async def test_empty_index_is_novel(monkeypatch):
     async def fake_search(_session, *, query, limit):
         return SearchResponse(hits=[], query=query, total=0)
 
-    monkeypatch.setattr(dedup, "semantic_search", fake_search)
+    monkeypatch.setattr(dedup, "semantic_search_for_dedup", fake_search)
 
     t = Ticket(itsm_ticket_id="3", itsm_provider="x", title="anything")
     result = await dedup.check_duplicate(_StubSession(), t, threshold=0.82)

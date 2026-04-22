@@ -128,6 +128,7 @@ export interface KbPushResult {
   article_id: string;
   itsm_kb_id: string;
   indexed_chunks: number;
+  linked_tickets: number;
 }
 
 export interface KbSettings {
@@ -141,6 +142,8 @@ export interface KbSettings {
   itsm_adapter: string;
   itsm_config: Record<string, unknown>;
   dedup_threshold: number;
+  min_resolution_chars: number;
+  thinness_threshold_chars: number;
   updated_at: string;
 }
 

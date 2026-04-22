@@ -28,6 +28,8 @@ async def get_settings_row(db: AsyncSession = Depends(get_session)) -> dict:
         "itsm_adapter": row.itsm_adapter,
         "itsm_config": row.itsm_config,
         "dedup_threshold": float(row.dedup_threshold),
+        "min_resolution_chars": row.min_resolution_chars,
+        "thinness_threshold_chars": row.thinness_threshold_chars,
         "updated_at": row.updated_at,
     }
 

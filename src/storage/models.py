@@ -179,6 +179,8 @@ class KbSettings(Base):
     itsm_adapter: Mapped[str] = mapped_column(String, default="mock")
     itsm_config: Mapped[dict] = mapped_column(JSONB, default=dict)
     dedup_threshold: Mapped[float] = mapped_column(Numeric, default=0.82)
+    min_resolution_chars: Mapped[int] = mapped_column(Integer, default=20)
+    thinness_threshold_chars: Mapped[int] = mapped_column(Integer, default=120)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

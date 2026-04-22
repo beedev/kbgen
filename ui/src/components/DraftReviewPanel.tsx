@@ -4,7 +4,9 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { ConfidenceScorecard } from './ConfidenceScorecard';
 import { CoverageList } from './CoverageList';
+import { KbLink } from './KbLink';
 import { MarkdownEditor } from './MarkdownEditor';
+import { useToast } from './Toaster';
 import {
   useApproveKbDraft,
   useKbDraft,
@@ -27,6 +29,7 @@ export function DraftReviewPanel({
   const approve = useApproveKbDraft();
   const reject = useRejectKbDraft();
   const push = usePushKbDraft();
+  const toast = useToast();
 
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
@@ -47,6 +50,12 @@ export function DraftReviewPanel({
   }
 
   const canEdit = draft.status !== 'PUSHED' && draft.status !== 'REJECTED';
+  const disabledReason =
+    draft.status === 'PUSHED'
+      ? 'Draft is already published to the ITSM — no further action from here.'
+      : draft.status === 'REJECTED'
+        ? 'Draft was rejected and archived — no further action from here.'
+        : '';
 
   const onSave = async () => {
     await update.mutateAsync({
@@ -70,7 +79,9 @@ export function DraftReviewPanel({
           <Badge tone="success">serves {coverage.total_tickets} tickets</Badge>
         )}
         {draft.itsm_kb_id && (
-          <span className="text-xs text-[var(--kbgen-text-muted)]">· KB {draft.itsm_kb_id}</span>
+          <span className="text-xs text-[var(--kbgen-text-muted)]">
+            · <KbLink kbId={draft.itsm_kb_id} />
+          </span>
         )}
       </div>
 
@@ -147,31 +158,111 @@ export function DraftReviewPanel({
 
       {coverage && <CoverageList coverage={coverage} />}
 
+      {/* Banner surfaces the terminal status so reviewers aren't confused by
+          greyed-out action buttons below. */}
+      {!canEdit && (
+        <div
+          className={`rounded-lg border p-3 text-sm ${
+            draft.status === 'PUSHED'
+              ? 'bg-emerald-50 border-[var(--kbgen-success)] text-emerald-800'
+              : 'bg-rose-50 border-[var(--kbgen-danger)] text-rose-800'
+          }`}
+        >
+          {draft.status === 'PUSHED' ? (
+            <>
+              <strong>Already published.</strong> This article is live in the ITSM
+              {draft.itsm_kb_id ? (
+                <>
+                  {' '}as <KbLink kbId={draft.itsm_kb_id} className="underline" />
+                </>
+              ) : null}
+              {draft.pushed_at && (
+                <>
+                  {' '}on{' '}
+                  <time>{new Date(draft.pushed_at).toLocaleString()}</time>
+                </>
+              )}
+              . The actions below are disabled because a published article
+              can&rsquo;t be re-pushed from here — edit the ITSM record directly, or
+              reject this draft to archive it.
+            </>
+          ) : (
+            <>
+              <strong>Rejected.</strong> This draft was rejected
+              {draft.reviewed_at && (
+                <>
+                  {' '}on{' '}
+                  <time>{new Date(draft.reviewed_at).toLocaleString()}</time>
+                </>
+              )}{' '}
+              and is archived. Actions are disabled.
+            </>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--kbgen-border)]">
         <Button
           variant="ghost"
           onClick={async () => {
-            await reject.mutateAsync({ id: draft.id });
-            onAction?.('rejected');
+            try {
+              await reject.mutateAsync({ id: draft.id });
+              toast.push('info', `Rejected "${draft.title}".`);
+              onAction?.('rejected');
+            } catch (err) {
+              toast.push('error', `Reject failed: ${String(err)}`);
+            }
           }}
           disabled={!canEdit || reject.isPending}
+          title={!canEdit ? disabledReason : 'Discard this draft'}
         >
           Reject
         </Button>
         <Button
           variant="secondary"
-          onClick={onSave}
+          onClick={async () => {
+            try {
+              await onSave();
+              toast.push('success', `Saved edits to "${title}".`);
+            } catch (err) {
+              toast.push('error', `Save failed: ${String(err)}`);
+            }
+          }}
           disabled={!canEdit || !dirty || update.isPending}
+          title={
+            !canEdit
+              ? disabledReason
+              : !dirty
+                ? 'No unsaved edits'
+                : 'Save your edits to the draft'
+          }
         >
           {update.isPending ? 'Saving…' : dirty ? 'Save edits' : 'Saved'}
         </Button>
         <Button
           onClick={async () => {
-            await approve.mutateAsync({ id: draft.id });
-            await push.mutateAsync({ id: draft.id });
-            onAction?.('pushed');
+            try {
+              await approve.mutateAsync({ id: draft.id });
+              const result = await push.mutateAsync({ id: draft.id });
+              const linked = result.linked_tickets ?? 0;
+              const linkedNote =
+                linked > 0
+                  ? ` Linked to ${linked} ticket${linked === 1 ? '' : 's'}.`
+                  : '';
+              toast.push(
+                'success',
+                `Pushed to ITSM as KB ${result.itsm_kb_id}. Indexed ${result.indexed_chunks} chunks.${linkedNote}`,
+                6000,
+              );
+              onAction?.('pushed');
+            } catch (err) {
+              toast.push('error', `Push failed: ${String(err)}`);
+            }
           }}
           disabled={!canEdit || push.isPending}
+          title={
+            !canEdit ? disabledReason : 'Approve this draft and push it to the ITSM as a KB article'
+          }
         >
           {push.isPending ? 'Pushing…' : 'Approve & Push to ITSM'}
         </Button>

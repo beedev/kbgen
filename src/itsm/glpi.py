@@ -308,3 +308,39 @@ class GLPIAdapter(ITSMAdapter):
                 return str(kb_id)
             finally:
                 await self._kill_session(client, token)
+
+    async def link_kb_to_ticket(self, *, itsm_kb_id: str, itsm_ticket_id: str) -> bool:
+        """Create a glpi_knowbaseitems_items row so the ticket's KB tab shows it.
+
+        GLPI models ticket↔KB associations as a separate KnowbaseItem_Item
+        entity. Idempotent at the API level: if the same association already
+        exists GLPI returns a non-201 that we swallow.
+        """
+        payload = {
+            "input": {
+                "knowbaseitems_id": int(itsm_kb_id),
+                "itemtype": "Ticket",
+                "items_id": int(itsm_ticket_id),
+            }
+        }
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            token = await self._init_session(client)
+            try:
+                r = await client.post(
+                    f"{self.base_url}/KnowbaseItem_Item",
+                    headers=self._session_headers(token),
+                    json=payload,
+                )
+                if r.status_code in (200, 201):
+                    return True
+                # Duplicate association → GLPI responds 400/409. Treat as success.
+                body_text = (r.text or "").lower()
+                if r.status_code in (400, 409) and "already" in body_text:
+                    return True
+                log.warning(
+                    "GLPI link_kb_to_ticket kb=%s ticket=%s → %s %s",
+                    itsm_kb_id, itsm_ticket_id, r.status_code, r.text[:200],
+                )
+                return False
+            finally:
+                await self._kill_session(client, token)

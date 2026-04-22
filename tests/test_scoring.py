@@ -52,6 +52,31 @@ def test_duplicate_kills_coverage():
     assert s.coverage < 0.1
 
 
+def test_custom_thinness_threshold_tightens_or_loosens():
+    # At default threshold (120), a 50-char resolution takes a penalty.
+    s_default = score(
+        ticket=_ticket("x" * 50), draft=_draft(0.9), nearest_neighbour_relevance=None
+    )
+    # Raise the threshold to 300 → the same 50-char resolution is more-thin,
+    # larger penalty, lower accuracy.
+    s_strict = score(
+        ticket=_ticket("x" * 50),
+        draft=_draft(0.9),
+        nearest_neighbour_relevance=None,
+        thinness_threshold_chars=300,
+    )
+    # Drop the threshold to 10 → the 50-char resolution clears the bar → full confidence.
+    s_lax = score(
+        ticket=_ticket("x" * 50),
+        draft=_draft(0.9),
+        nearest_neighbour_relevance=None,
+        thinness_threshold_chars=10,
+    )
+    assert s_strict.accuracy < s_default.accuracy
+    assert s_lax.accuracy > s_default.accuracy
+    assert round(s_lax.accuracy, 3) == 0.9
+
+
 def test_custom_weights_applied():
     s_default = score(
         ticket=_ticket("x" * 200), draft=_draft(0.5), nearest_neighbour_relevance=None

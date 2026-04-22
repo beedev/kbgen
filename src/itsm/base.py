@@ -61,6 +61,15 @@ class ITSMAdapter(ABC):
     ) -> str:
         """Push a new KB draft. Returns the ITSM's KB id."""
 
+    async def link_kb_to_ticket(self, *, itsm_kb_id: str, itsm_ticket_id: str) -> bool:
+        """Associate a KB article with a ticket so the ticket's KB tab lists it.
+
+        Default is a no-op (returns False) — adapters that can't express this
+        association silently skip. GLPI overrides to POST a KnowbaseItem_Item
+        row. Non-fatal: push flow logs but does not fail if this throws.
+        """
+        return False
+
     @abstractmethod
     async def test_connection(self) -> tuple[bool, str]:
         """Return (ok, human-readable status)."""

@@ -89,3 +89,5 @@ class SettingsUpdate(BaseModel):
     itsm_adapter: str | None = None
     itsm_config: dict | None = None
     dedup_threshold: float | None = None
+    min_resolution_chars: int | None = None
+    thinness_threshold_chars: int | None = None
