@@ -115,6 +115,10 @@ async def draft_coverage(
             }
 
     # "Covered" tickets — every ticket the dedup matched against this article.
+    # Exclude the master's own ticket id defensively: in rare race conditions
+    # (two overlapping poll cycles for the same ticket) the master row can end
+    # up with matched_article_id pointing at its own freshly-drafted article,
+    # which would otherwise render it twice in the UI.
     covered_rows = (
         await db.execute(
             select(ProcessedTicket)
@@ -133,6 +137,7 @@ async def draft_coverage(
             "relation": "covered_by",
         }
         for r in covered_rows
+        if r.itsm_ticket_id != article.source_ticket_id
     ]
 
     return {
