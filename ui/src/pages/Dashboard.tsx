@@ -10,7 +10,9 @@ export function Dashboard({ onNavigate }: { onNavigate: (p: string) => void }) {
   const { data: stats } = useKbStats('24h');
   const { data: topics } = useKbTopics('30d');
   const { data: settings } = useKbSettings();
-  const { data: drafts } = useKbDrafts({ status: 'DRAFT', source: 'generated', limit: 6 });
+  // No source filter — the review queue should include gap-RAG drafts alongside
+  // the normal ticket-driven ones so reviewers see everything awaiting action.
+  const { data: drafts } = useKbDrafts({ status: 'DRAFT', limit: 6 });
 
   const tiles: Stat[] = [
     {
@@ -174,6 +176,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (p: string) => void }) {
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-xs text-[var(--kbgen-text-muted)]">
                       {d.category && <Badge>{d.category}</Badge>}
+                      {d.source === 'gap-rag' && <Badge tone="warning">SYNTHESISED</Badge>}
                       {d.source_ticket_id && <span>ticket {d.source_ticket_id}</span>}
                     </div>
                   </button>

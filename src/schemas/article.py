@@ -19,6 +19,7 @@ class ArticleStatus(str, Enum):
 class ArticleSource(str, Enum):
     GENERATED = "generated"
     IMPORTED_FROM_ITSM = "imported_from_itsm"
+    GAP_RAG = "gap-rag"
 
 
 class ArticleDraft(BaseModel):

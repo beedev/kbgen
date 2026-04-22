@@ -38,8 +38,15 @@ async def record(
     matched_article_id: UUID | None = None,
     matched_score: float | None = None,
     draft_article_id: UUID | None = None,
+    embedding: list[float] | None = None,
 ) -> ProcessedTicket:
-    """Upsert — previously SKIPPED tickets retry cleanly on the next cycle."""
+    """Upsert — previously SKIPPED tickets retry cleanly on the next cycle.
+
+    `embedding` is optional: when omitted, an existing embedding on the row is
+    preserved (supports partial updates from gap-draft etc. without re-embedding);
+    when set, it overwrites. New rows without an embedding leave the column NULL
+    and `/admin/reindex-tickets` can backfill them.
+    """
     row = await get(db, itsm_ticket_id)
     if row is None:
         row = ProcessedTicket(itsm_ticket_id=itsm_ticket_id)
@@ -56,5 +63,7 @@ async def record(
     row.matched_article_id = matched_article_id
     row.matched_score = matched_score
     row.draft_article_id = draft_article_id
+    if embedding is not None:
+        row.embedding = embedding
     await db.commit()
     return row

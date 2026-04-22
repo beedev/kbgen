@@ -1,6 +1,6 @@
-"""/search — semantic search over the indexed KB."""
+"""/search — unified semantic search over KB articles + processed tickets."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.retrieval.searcher import semantic_search
@@ -14,7 +14,12 @@ router = APIRouter()
 async def search(
     q: str,
     category: str | None = None,
+    kind: str | None = None,
     limit: int = 10,
     db: AsyncSession = Depends(get_session),
 ) -> SearchResponse:
-    return await semantic_search(db, query=q, category=category, limit=limit)
+    if kind not in (None, "", "kb", "ticket"):
+        raise HTTPException(400, "kind must be one of: kb, ticket (omit for both)")
+    return await semantic_search(
+        db, query=q, category=category, kind=kind or None, limit=limit
+    )

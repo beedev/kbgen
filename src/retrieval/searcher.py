@@ -1,4 +1,8 @@
-"""Semantic search over kb.chunk via pgvector cosine distance."""
+"""Semantic search over kb.chunk (KB articles) + kb.processed_ticket (tickets).
+
+`/search` returns a unified ranked list across both corpora, with each hit
+tagged `object_kind` so the UI can render KB chunks and tickets distinctly.
+"""
 
 from __future__ import annotations
 
@@ -9,30 +13,21 @@ from src.llm.embeddings import embed_one
 from src.schemas.api import SearchHit, SearchResponse
 
 
-async def semantic_search(
+async def _search_articles(
     db: AsyncSession,
     *,
-    query: str,
-    category: str | None = None,
-    limit: int = 10,
-) -> SearchResponse:
-    if not query.strip():
-        return SearchResponse(hits=[], query=query, total=0)
-
-    vec = await embed_one(query)
-    vec_literal = "[" + ",".join(f"{v:.7f}" for v in vec) + "]"
-
-    # End-user semantic search (the /ask + /search UIs) only wants published or
-    # approved content. Internal dedup wants to match against drafts too — see
-    # `semantic_search_for_dedup` below.
+    vec_literal: str,
+    category: str | None,
+    limit: int,
+) -> list[SearchHit]:
+    """KB-chunk search (the original /search behaviour). Filtered to
+    published/approved content — internal dedup uses a separate helper."""
     where = "WHERE a.status IN ('PUSHED','IMPORTED','APPROVED')"
     params: dict = {"limit": limit}
     if category:
         where += " AND a.category = :category"
         params["category"] = category
 
-    # For each matching chunk, compute relevance = 1 - cosine_distance, then
-    # pick each article's best chunk (DISTINCT ON) and order by score.
     sql = text(
         f"""
         SELECT * FROM (
@@ -52,19 +47,112 @@ async def semantic_search(
         """
     )
     rows = (await db.execute(sql, params)).mappings().all()
-    hits = [
+    return [
         SearchHit(
+            object_kind="kb",
             article_id=str(r["article_id"]),
             chunk_id=str(r["chunk_id"]),
+            itsm_kb_id=r["itsm_kb_id"],
             title=r["title"],
             category=r["category"],
             preview=_snip(r["preview"]),
             relevance=float(r["relevance"]),
             source_ticket_id=r["source_ticket_id"],
-            itsm_kb_id=r["itsm_kb_id"],
         )
         for r in rows
     ]
+
+
+async def _search_tickets(
+    db: AsyncSession,
+    *,
+    vec_literal: str,
+    category: str | None,
+    limit: int,
+) -> list[SearchHit]:
+    """Ticket search over kb.processed_ticket.embedding. Preview text is built
+    from the ticket's description/resolution since tickets aren't chunked.
+    """
+    where = "WHERE pt.embedding IS NOT NULL"
+    params: dict = {"limit": limit}
+    if category:
+        where += " AND pt.topic = :category"
+        params["category"] = category
+
+    sql = text(
+        f"""
+        SELECT
+            pt.itsm_ticket_id,
+            pt.title,
+            pt.topic,
+            pt.decision,
+            COALESCE(NULLIF(pt.description, ''), NULLIF(pt.resolution, ''), pt.title)
+                                                AS preview,
+            1 - (pt.embedding <=> '{vec_literal}'::vector) AS relevance
+        FROM kb.processed_ticket pt
+        {where}
+        ORDER BY pt.embedding <=> '{vec_literal}'::vector
+        LIMIT :limit
+        """
+    )
+    rows = (await db.execute(sql, params)).mappings().all()
+    return [
+        SearchHit(
+            object_kind="ticket",
+            itsm_ticket_id=r["itsm_ticket_id"],
+            topic=r["topic"],
+            decision=r["decision"],
+            title=r["title"],
+            category=r["topic"],
+            preview=_snip(r["preview"]),
+            relevance=float(r["relevance"]),
+        )
+        for r in rows
+    ]
+
+
+async def semantic_search(
+    db: AsyncSession,
+    *,
+    query: str,
+    category: str | None = None,
+    kind: str | None = None,           # "kb" | "ticket" | None (both)
+    limit: int = 10,
+) -> SearchResponse:
+    """Unified semantic search over KB chunks + tickets.
+
+    Embeds `query` once, runs both pgvector lookups in parallel topology, then
+    merges and re-sorts by relevance, trimming to `limit`. `kind` narrows to
+    one corpus when the caller only wants one. `category` applies across both:
+    article.category for KB hits and processed_ticket.topic for tickets.
+    """
+    if not query.strip():
+        return SearchResponse(hits=[], query=query, total=0)
+
+    vec = await embed_one(query)
+    vec_literal = "[" + ",".join(f"{v:.7f}" for v in vec) + "]"
+
+    # Overshoot each corpus so the merged top-N includes the genuinely best
+    # cross-corpus hits — otherwise a corpus with many high-scoring items
+    # could crowd out a single stronger hit from the other one.
+    per_source = max(limit, 10)
+
+    hits: list[SearchHit] = []
+    if kind != "ticket":
+        hits.extend(
+            await _search_articles(
+                db, vec_literal=vec_literal, category=category, limit=per_source
+            )
+        )
+    if kind != "kb":
+        hits.extend(
+            await _search_tickets(
+                db, vec_literal=vec_literal, category=category, limit=per_source
+            )
+        )
+
+    hits.sort(key=lambda h: h.relevance, reverse=True)
+    hits = hits[:limit]
     return SearchResponse(hits=hits, query=query, total=len(hits))
 
 
@@ -73,17 +161,22 @@ async def semantic_search_for_dedup(
     *,
     query: str,
     limit: int = 3,
+    query_vec: list[float] | None = None,
 ) -> SearchResponse:
     """Broader search used by the dedup step — includes DRAFT + EDITED too.
 
     The key insight: if ticket #1 already produced a pending draft that
     matches ticket #2's content, ticket #2 is COVERED by that draft. One KB
     should serve many tickets.
+
+    `query_vec` short-circuits the embedding call when the caller already has
+    a vector for `query` (e.g. the poll cycle embeds each ticket once for
+    storage and can hand the same vector here to skip a round-trip).
     """
     if not query.strip():
         return SearchResponse(hits=[], query=query, total=0)
 
-    vec = await embed_one(query)
+    vec = query_vec if query_vec is not None else await embed_one(query)
     vec_literal = "[" + ",".join(f"{v:.7f}" for v in vec) + "]"
 
     sql = text(

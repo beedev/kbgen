@@ -9,7 +9,7 @@ export type KbArticleStatus =
   | 'PUSHED'
   | 'IMPORTED';
 
-export type KbArticleSource = 'generated' | 'imported_from_itsm';
+export type KbArticleSource = 'generated' | 'imported_from_itsm' | 'gap-rag';
 
 export type KbDecision = 'DRAFTED' | 'COVERED' | 'SKIPPED';
 
@@ -94,15 +94,24 @@ export interface KbDashboardStats {
   index_freshness: string | null;
 }
 
+export type KbSearchHitKind = 'kb' | 'ticket';
+
 export interface KbSearchHit {
-  article_id: string;
-  chunk_id: string;
+  object_kind: KbSearchHitKind;
+  // KB-chunk fields (populated when object_kind === 'kb')
+  article_id: string | null;
+  chunk_id: string | null;
+  itsm_kb_id: string | null;
+  // Ticket fields (populated when object_kind === 'ticket')
+  itsm_ticket_id: string | null;
+  topic: string | null;
+  decision: KbDecision | null;
+  // Common
   title: string;
   category: string | null;
   preview: string;
   relevance: number;
   source_ticket_id: string | null;
-  itsm_kb_id: string | null;
 }
 
 export interface KbSearchResponse {

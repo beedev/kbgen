@@ -46,10 +46,18 @@ export function useKbTickets(topic?: string, limit = 200) {
   });
 }
 
-export function useKbSearch(query: string, category?: string, limit = 10) {
+export function useKbSearch(
+  query: string,
+  category?: string,
+  limit = 10,
+  kind?: 'kb' | 'ticket',
+) {
   return useQuery({
-    queryKey: ['kb', 'search', query, category, limit],
-    queryFn: () => api<KbSearchResponse>('/search', { params: { q: query, category, limit } }),
+    queryKey: ['kb', 'search', query, category, limit, kind ?? 'all'],
+    queryFn: () =>
+      api<KbSearchResponse>('/search', {
+        params: { q: query, category, kind, limit },
+      }),
     enabled: query.trim().length > 1,
   });
 }
@@ -137,6 +145,24 @@ export function useTriggerKbImport() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api<KbImportResult>('/import/kb', { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
+  });
+}
+
+// ── Gap-RAG: draft a KB for a SKIPPED ticket from neighbour KBs ──────────
+export interface KbGapDraftResult {
+  draft_id: string;
+  neighbours: { article_id: string; title: string; relevance: number }[];
+  prompt_version: string;
+}
+
+export function useDraftGapFromNeighbours() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (itsm_ticket_id: string) =>
+      api<KbGapDraftResult>(`/tickets/${encodeURIComponent(itsm_ticket_id)}/gap-draft`, {
+        method: 'POST',
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
   });
 }

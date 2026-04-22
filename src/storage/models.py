@@ -132,6 +132,11 @@ class ProcessedTicket(Base):
         UUID(as_uuid=True), ForeignKey(f"{_SCHEMA}.article.id"), nullable=True
     )
 
+    # Ticket embedding powers unified /search across KB + tickets. Filled in at
+    # ingestion time from Ticket.to_index_text(); nullable because historical
+    # rows pre-date this column and get backfilled by /admin/reindex-tickets.
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))
+
 
 class PushLog(Base):
     __tablename__ = "push_log"

@@ -25,11 +25,14 @@ async def check_duplicate(
     db: AsyncSession,
     ticket: Ticket,
     threshold: float,
+    query_vec: list[float] | None = None,
 ) -> DedupResult:
     # Broader search — matches against DRAFTS too, so the first ticket in a
     # topic produces the master draft, and subsequent similar tickets roll up
     # as COVERED by it. One KB article serves many tickets.
-    result = await semantic_search_for_dedup(db, query=ticket.to_index_text(), limit=2)
+    result = await semantic_search_for_dedup(
+        db, query=ticket.to_index_text(), limit=2, query_vec=query_vec
+    )
     if not result.hits:
         return DedupResult(False, None, None, "no existing KB articles indexed")
 

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.demo.ticket_fixtures import next_pack
 from src.itsm import get_adapter
+from src.llm.embeddings import embed_many
 from src.storage.db import get_session
 from src.storage.models import Article, Chunk, ProcessedTicket, PushLog, TopicSnapshot
 
@@ -114,6 +115,59 @@ async def relink_kb_to_tickets(db: AsyncSession = Depends(get_session)) -> dict:
         "articles_processed": len(articles),
         "articles_linked": articles_linked,
         "links_created": links_created,
+        "errors": errors[:20],
+    }
+
+
+@router.post("/admin/reindex-tickets")
+async def reindex_tickets(
+    batch_size: int = 64,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """One-shot backfill: embed every `kb.processed_ticket` row whose `embedding`
+    column is NULL. New rows created by the poll cycle are embedded at write
+    time, so this is only needed after the ticket-embedding migration or after
+    a bulk edit that invalidates vectors.
+
+    Processes in batches to stay under the OpenAI per-request cap and to keep
+    each DB round-trip small.
+    """
+    rows = (
+        await db.execute(
+            select(ProcessedTicket).where(ProcessedTicket.embedding.is_(None))
+        )
+    ).scalars().all()
+
+    total_missing = len(rows)
+    if total_missing == 0:
+        return {"embedded": 0, "total_missing": 0}
+
+    embedded = 0
+    errors: list[str] = []
+    for i in range(0, total_missing, batch_size):
+        batch = rows[i : i + batch_size]
+        texts: list[str] = []
+        for r in batch:
+            parts = [r.title or ""]
+            if r.description:
+                parts.append(r.description)
+            if r.resolution:
+                parts.append(r.resolution)
+            texts.append("\n\n".join(p for p in parts if p))
+        try:
+            vecs = await embed_many(texts)
+        except Exception as exc:
+            errors.append(f"batch starting {i}: {exc.__class__.__name__}: {exc}")
+            log.warning("reindex-tickets batch %d failed: %s", i, exc)
+            continue
+        for r, v in zip(batch, vecs):
+            r.embedding = v
+            embedded += 1
+        await db.commit()
+
+    return {
+        "embedded": embedded,
+        "total_missing": total_missing,
         "errors": errors[:20],
     }
 

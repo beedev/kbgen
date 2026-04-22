@@ -70,6 +70,11 @@ export function DraftReviewPanel({
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <Badge tone="brand">{draft.status}</Badge>
+        {draft.source === 'gap-rag' && (
+          <span title="Synthesised from neighbour KBs — verify steps before pushing">
+            <Badge tone="warning">SYNTHESISED</Badge>
+          </span>
+        )}
         {draft.source_ticket_id && (
           <span className="text-xs text-[var(--kbgen-text-muted)]">
             master ticket {draft.itsm_provider}:{draft.source_ticket_id}

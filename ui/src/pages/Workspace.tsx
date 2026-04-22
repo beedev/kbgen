@@ -9,7 +9,13 @@ import { FilterBar } from '../components/FilterBar';
 import { KbLink } from '../components/KbLink';
 import { LegendCard } from '../components/LegendCard';
 import { StatsDisplay } from '../components/StatsDisplay';
-import { useKbDraft, useKbDrafts, useKbTickets, useKbTopics } from '../hooks/useKb';
+import {
+  useDraftGapFromNeighbours,
+  useKbDraft,
+  useKbDrafts,
+  useKbTickets,
+  useKbTopics,
+} from '../hooks/useKb';
 import { itsmKbListUrl } from '../lib/itsm';
 import type { KbArticle, KbProcessedTicket } from '../types/kb';
 
@@ -522,7 +528,7 @@ function TicketDetail({
       />
     );
   }
-  return <SkippedView ticket={ticket} />;
+  return <SkippedView ticket={ticket} onAction={onAction} />;
 }
 
 function CoveredView({
@@ -623,7 +629,27 @@ function CoveredView({
   );
 }
 
-function SkippedView({ ticket }: { ticket: EnrichedTicket }) {
+function SkippedView({
+  ticket,
+  onAction,
+}: {
+  ticket: EnrichedTicket;
+  onAction?: () => void;
+}) {
+  const draftGap = useDraftGapFromNeighbours();
+
+  const onGenerate = () => {
+    draftGap.mutate(ticket.itsm_ticket_id, {
+      onSuccess: () => onAction?.(),
+    });
+  };
+
+  // Unpack the HTTP error thrown by api() — shape is "<status> <reason>: <body>".
+  // The 422 path is the "no neighbours found" refusal; we render a specific
+  // inline warning for it instead of the generic error string.
+  const rawErr = draftGap.error instanceof Error ? draftGap.error.message : '';
+  const is422 = rawErr.startsWith('422 ');
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -644,18 +670,53 @@ function SkippedView({ ticket }: { ticket: EnrichedTicket }) {
         </div>
       </Card>
       <Card>
-        <div className="p-4 space-y-2 opacity-60">
+        <div className="p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold">Generate for this gap</p>
-            <Badge tone="warning">Coming in MVP2</Badge>
+            <p className="text-sm font-semibold text-[var(--kbgen-text)]">
+              Draft from similar KBs
+            </p>
+            <Badge tone="brand">SYNTHESISED</Badge>
           </div>
           <p className="text-xs text-[var(--kbgen-text-secondary)]">
-            MVP2 will let you proactively draft an article for this gap using clustered
-            context from related tickets.
+            kbgen will pull the closest existing KBs in your library, use them as
+            grounding evidence, and ask the model to synthesise a draft. You'll review
+            it just like any other draft.
           </p>
-          <Button variant="secondary" disabled>
-            Flag as gap (MVP2)
+          <Button
+            variant="primary"
+            onClick={onGenerate}
+            disabled={draftGap.isPending}
+          >
+            {draftGap.isPending ? 'Synthesising…' : 'Generate draft from neighbours'}
           </Button>
+          {is422 ? (
+            <p className="text-xs text-[var(--kbgen-warning)] leading-snug">
+              No sufficiently similar existing KB to ground a draft. Resolve the ticket
+              in the ITSM or author a KB manually first — then try again.
+            </p>
+          ) : rawErr ? (
+            <p className="text-xs text-[var(--kbgen-danger)] leading-snug break-words">
+              {rawErr}
+            </p>
+          ) : null}
+          {draftGap.data && (
+            <div className="text-xs text-[var(--kbgen-text-secondary)] space-y-1 pt-1">
+              <p>
+                Draft created from <strong>{draftGap.data.neighbours.length}</strong>{' '}
+                neighbour{draftGap.data.neighbours.length === 1 ? '' : 's'}:
+              </p>
+              <ul className="list-disc list-inside space-y-0.5">
+                {draftGap.data.neighbours.map((n) => (
+                  <li key={n.article_id}>
+                    <span className="text-[var(--kbgen-text)]">{n.title}</span>{' '}
+                    <span className="text-[var(--kbgen-text-muted)]">
+                      · {Math.round(n.relevance * 100)}% similar
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </Card>
     </div>

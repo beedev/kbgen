@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.itsm import get_adapter
+from src.llm.embeddings import embed_one
 from src.llm.openai_generator import generate_article
 from src.pipeline.dedup import check_duplicate
 from src.schemas.api import PollCycleResult
@@ -46,6 +47,12 @@ async def process_ticket(db: AsyncSession, ticket: Ticket) -> dict:
 
     settings = await _load_settings(db)
 
+    # Embed once up-front so every persistence branch (SKIPPED / COVERED /
+    # DRAFTED) can store the vector without a second round-trip. The same
+    # text that the dedup step consumes feeds the embedding so dedup and
+    # /search stay aligned.
+    ticket_embedding = await embed_one(ticket.to_index_text())
+
     # Gap material: tickets without useful resolution notes can't be drafted
     # honestly. Record them as SKIPPED so the Topics view can surface the gap.
     min_chars = int(settings.min_resolution_chars or 20)
@@ -61,10 +68,16 @@ async def process_ticket(db: AsyncSession, ticket: Ticket) -> dict:
             resolved_at=ticket.resolved_at,
             decision="SKIPPED",
             decision_reason="resolution notes too thin to draft — flagged as gap",
+            embedding=ticket_embedding,
         )
         return {"status": "skipped", "reason": "thin resolution"}
 
-    dedup = await check_duplicate(db, ticket, threshold=float(settings.dedup_threshold))
+    dedup = await check_duplicate(
+        db,
+        ticket,
+        threshold=float(settings.dedup_threshold),
+        query_vec=ticket_embedding,
+    )
     if dedup.covered:
         await tickets_dal.record(
             db,
@@ -79,6 +92,7 @@ async def process_ticket(db: AsyncSession, ticket: Ticket) -> dict:
             decision_reason=dedup.reason,
             matched_article_id=dedup.matched_article_id,
             matched_score=dedup.matched_relevance,
+            embedding=ticket_embedding,
         )
         return {"status": "covered", "reason": dedup.reason}
 
@@ -130,6 +144,7 @@ async def process_ticket(db: AsyncSession, ticket: Ticket) -> dict:
         matched_article_id=dedup.matched_article_id,
         matched_score=dedup.matched_relevance,
         draft_article_id=row.id,
+        embedding=ticket_embedding,
     )
     return {"status": "drafted", "draft_id": str(row.id), "overall_score": scores.overall}
 

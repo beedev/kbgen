@@ -44,14 +44,25 @@ class DraftUpdate(BaseModel):
 
 
 class SearchHit(BaseModel):
-    article_id: str
-    chunk_id: str
+    """A single search result. `object_kind` discriminates between KB chunks
+    and tickets; the rest of the fields light up conditionally based on kind.
+    """
+
+    object_kind: str = "kb"                # "kb" | "ticket"
+    # KB-chunk fields
+    article_id: str | None = None
+    chunk_id: str | None = None
+    itsm_kb_id: str | None = None
+    # Ticket fields
+    itsm_ticket_id: str | None = None
+    topic: str | None = None
+    decision: str | None = None            # DRAFTED | COVERED | SKIPPED
+    # Common
     title: str
     category: str | None = None
     preview: str
     relevance: float
-    source_ticket_id: str | None = None
-    itsm_kb_id: str | None = None
+    source_ticket_id: str | None = None    # for KB hits, the ticket that spawned the article
 
 
 class SearchResponse(BaseModel):
