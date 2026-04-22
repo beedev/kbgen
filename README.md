@@ -306,6 +306,66 @@ running stack, then re-commit + re-export.
 
 ---
 
+## Reverse-proxy deployment (behind nginx at a sub-path)
+
+By default kbgen serves at the root — `http://host:8004/`. To host it behind
+nginx at a sub-path like `https://host/kbgen/`, rebuild the image with a
+`BASE_PATH` build arg. The value gets baked into the SPA bundle (via Vite's
+`base`) and also made available to the Python service (via the `BASE_PATH`
+env var) so FastAPI's OpenAPI/docs URLs and an internal base-path-stripping
+middleware both know about it.
+
+### 1. Build the image with the prefix baked in
+
+```bash
+docker build -t kbgen:with-prefix --build-arg BASE_PATH=/kbgen .
+```
+
+Or via compose:
+
+```yaml
+# docker-compose.yml
+kbgen:
+  build:
+    context: .
+    args:
+      BASE_PATH: /kbgen
+```
+
+### 2. Nginx snippet
+
+```nginx
+location /kbgen/ {
+    # Trailing slash on proxy_pass is load-bearing — it strips the /kbgen/
+    # prefix before forwarding, so FastAPI routes match unprefixed paths.
+    proxy_pass http://kbgen:8004/;
+
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Prefix /kbgen;
+
+    # Kbgen is pure HTTP — no websockets/SSE — so default buffering is fine.
+    proxy_read_timeout  90s;
+    proxy_send_timeout  90s;
+}
+```
+
+### 3. What gets rebuilt vs. what doesn't
+
+- **Rebuild required** to change the path — the prefix is baked into asset
+  URLs and SPA routing at Vite build time. Running the same image at a
+  different sub-path won't work.
+- **Default image unchanged** — building without `BASE_PATH` gives you the
+  current root-mounted behaviour byte-for-byte.
+- **Direct hits still work** — the image also answers at the prefixed path
+  without nginx (handy for health-checking the SPA directly inside a
+  cluster), because the Python service strips the prefix itself when the
+  proxy hasn't already.
+
+---
+
 ## License
 
 See `LICENSE`.

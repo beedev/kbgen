@@ -16,9 +16,12 @@ from fastapi.staticfiles import StaticFiles
 
 from src.api import admin, drafts, health, pipeline, search, settings, stats, tickets, topics
 from src.bootstrap import schedule_bootstrap
+from src.config import get_settings
 from src.scheduler import start_scheduler, stop_scheduler
 
 STATIC_DIR = Path(__file__).resolve().parent / "static" / "dist"
+
+_settings = get_settings()
 
 
 @asynccontextmanager
@@ -36,6 +39,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="kbgen", version="0.1.0", lifespan=lifespan)
+# NB: we deliberately do NOT set FastAPI(root_path=BASE_PATH). Starlette
+# interprets root_path as "requests arrive prefixed, strip before routing",
+# which clashes with the standard nginx pattern (`proxy_pass http://x/`)
+# that strips the prefix at the proxy layer. Instead we register a
+# middleware below that strips the prefix ourselves when it's present —
+# that way the same image works whether the proxy strips or not.
 
 # CORS still permissive for local dev where Vite may hit /api from :5173.
 app.add_middleware(
@@ -44,6 +53,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Base-path middleware — strips the configured BASE_PATH prefix from incoming
+# request URLs so the same image works (a) behind nginx that already strips
+# it and (b) direct without a proxy, where the browser is sending the full
+# prefixed URL. No-op when BASE_PATH is unset.
+_base_prefix = _settings.normalised_base_path
+if _base_prefix:
+    @app.middleware("http")
+    async def strip_base_path(request, call_next):
+        path = request.scope.get("path", "")
+        if path.startswith(f"{_base_prefix}/") or path == _base_prefix:
+            stripped = path[len(_base_prefix):] or "/"
+            request.scope["path"] = stripped
+            raw = request.scope.get("raw_path")
+            if raw:
+                request.scope["raw_path"] = stripped.encode()
+        return await call_next(request)
 
 # ── REST API ─────────────────────────────────────────────────────────────
 # Health lives under /api so a same-origin SPA can always reach it.
@@ -70,6 +97,9 @@ for module, tag in [
 # index.html for any non-API path so client-side routing (/, /workspace,
 # /search, /admin, …) works.
 if STATIC_DIR.exists():
+    # Single mount — the base-path middleware above already strips any
+    # configured BASE_PATH prefix, so incoming `/assets/…` always maps here
+    # whether the image is running direct or behind a reverse proxy.
     app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 
     from fastapi.responses import FileResponse, JSONResponse

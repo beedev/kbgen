@@ -10,6 +10,12 @@ WORKDIR /ui
 COPY ui/package.json ui/pnpm-lock.yaml* ./
 RUN corepack enable && pnpm install --frozen-lockfile || pnpm install
 COPY ui/ ./
+# Reverse-proxy base path. Empty = mounted at root. Example:
+#   docker build --build-arg BASE_PATH=/kbgen ...
+# Vite rewrites all asset URLs and exposes this to app code via
+# import.meta.env.BASE_URL.
+ARG BASE_PATH=""
+ENV VITE_BASE_PATH=${BASE_PATH}
 # Vite outDir defaults to ../src/static/dist which is outside WORKDIR — the
 # config resolves it relative to the ui/ source. Redirect to /ui/dist during
 # the image build so stage-2 can copy without traversing parent paths.
@@ -19,7 +25,12 @@ RUN pnpm exec tsc -b \
 # ── Stage 2: Python service ─────────────────────────────────────────────
 FROM python:3.11-slim
 
-ENV PYTHONUNBUFFERED=1 \
+# Re-declare so the runtime image knows the build-time base path. Baked into
+# a runtime ENV so FastAPI's root_path and any log lines reflect it without
+# needing the operator to re-pass it at `docker run` time.
+ARG BASE_PATH=""
+ENV BASE_PATH=${BASE_PATH} \
+    PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONPATH=/app \
     PORT=8004

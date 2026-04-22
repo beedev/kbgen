@@ -45,9 +45,23 @@ class Settings(BaseSettings):
     # deploys don't seed a customer's real ITSM).
     auto_seed_itsm: bool = Field(default=False, validation_alias="AUTO_SEED_ITSM")
 
+    # Reverse-proxy base path. Set at build time via BASE_PATH (Docker build arg
+    # also baked into the SPA bundle) AND at runtime here so FastAPI's OpenAPI/
+    # docs link generation uses the proxied path. Default empty = mounted at
+    # root. Example: BASE_PATH=/kbgen
+    base_path: str = Field(default="", validation_alias="BASE_PATH")
+
     @property
     def effective_port(self) -> int:
         return self.backend_port or self.port
+
+    @property
+    def normalised_base_path(self) -> str:
+        """`""` stays `""`; `/kbgen` and `/kbgen/` both normalise to `/kbgen`."""
+        bp = (self.base_path or "").strip()
+        if not bp:
+            return ""
+        return "/" + bp.strip("/")
 
 
 @lru_cache

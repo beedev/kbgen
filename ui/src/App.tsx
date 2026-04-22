@@ -7,6 +7,26 @@ import { SystemStatus } from './pages/admin/SystemStatus';
 
 type Persona = 'operator' | 'admin';
 
+// BASE — when kbgen is reverse-proxied at a non-root path, Vite bakes this
+// prefix into the bundle at build time. We strip it from `location.pathname`
+// before routing (so routes stay root-relative in code) and re-add it when
+// pushing state so the browser URL stays under the proxied path.
+const RAW_BASE = import.meta.env.BASE_URL || '/';
+const BASE = RAW_BASE === '/' ? '' : RAW_BASE.replace(/\/+$/, '');
+
+function stripBase(p: string): string {
+  if (!BASE) return p || '/';
+  if (p === BASE) return '/';
+  if (p.startsWith(`${BASE}/`)) return p.slice(BASE.length) || '/';
+  return p || '/';
+}
+
+function withBase(p: string): string {
+  if (!BASE) return p;
+  if (p.startsWith(BASE)) return p;
+  return `${BASE}${p.startsWith('/') ? p : `/${p}`}`;
+}
+
 const operatorNav: NavItem[] = [
   { label: 'Dashboard', href: '/' },
   { label: 'Workspace', href: '/workspace' },
@@ -65,7 +85,7 @@ function PersonaSwitcher({
 
 export function App() {
   const [currentPath, setCurrentPathState] = useState<string>(
-    typeof window !== 'undefined' ? window.location.pathname || '/' : '/',
+    typeof window !== 'undefined' ? stripBase(window.location.pathname || '/') : '/',
   );
   const [persona, setPersona] = useState<Persona>(
     typeof window !== 'undefined'
@@ -75,8 +95,8 @@ export function App() {
 
   const setCurrentPath = (p: string) => {
     if (typeof window !== 'undefined') {
-      window.history.pushState({}, '', p);
-      setCurrentPathState(window.location.pathname || '/');
+      window.history.pushState({}, '', withBase(p));
+      setCurrentPathState(stripBase(window.location.pathname || '/'));
     } else {
       setCurrentPathState(p.split('?')[0] || '/');
     }
@@ -89,7 +109,7 @@ export function App() {
   };
 
   useEffect(() => {
-    const onPop = () => setCurrentPathState(window.location.pathname || '/');
+    const onPop = () => setCurrentPathState(stripBase(window.location.pathname || '/'));
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);

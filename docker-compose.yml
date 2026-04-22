@@ -56,6 +56,14 @@ services:
       start_period: 60s
 
   kbgen:
+    # Build arg BASE_PATH bakes a reverse-proxy prefix into the SPA bundle
+    # (default empty = mounted at root). Example for deploying under
+    # https://host/kbgen/ :
+    #   build:
+    #     context: .
+    #     args:
+    #       BASE_PATH: /kbgen
+    # See the "Reverse-proxy deployment" section in README.md for nginx config.
     build: .
     container_name: kbgen-app
     restart: unless-stopped
