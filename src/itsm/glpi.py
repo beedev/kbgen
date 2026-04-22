@@ -116,21 +116,64 @@ class GLPIAdapter(ITSMAdapter):
         except Exception as exc:
             return False, f"{exc.__class__.__name__}: {exc}"
 
+    async def _paginate(
+        self,
+        client: httpx.AsyncClient,
+        token: str,
+        endpoint: str,
+        *,
+        extra_params: dict | None = None,
+        page_size: int = 200,
+        max_total: int = 2000,
+    ):
+        """Yield rows from a GLPI list endpoint across pages.
+
+        GLPI's list endpoints return a single page per call (it caps at ~200
+        rows and returns 206 Partial Content with a Content-Range header).
+        We walk pages until we get a short page or hit the safety cap.
+        """
+        offset = 0
+        yielded = 0
+        while True:
+            params = {"range": f"{offset}-{offset + page_size - 1}"}
+            if extra_params:
+                params.update(extra_params)
+            r = await client.get(
+                f"{self.base_url}/{endpoint}",
+                headers=self._session_headers(token),
+                params=params,
+            )
+            if r.status_code == 416:
+                # Range past end — happens when total % page_size == 0.
+                break
+            r.raise_for_status()
+            rows = r.json() or []
+            if not rows:
+                break
+            for row in rows:
+                yield row
+                yielded += 1
+            if len(rows) < page_size:
+                break
+            offset += page_size
+            if yielded >= max_total:
+                log.warning(
+                    "GLPI %s pagination hit %d-row cap; later rows not fetched",
+                    endpoint, max_total,
+                )
+                break
+
     async def list_resolved_tickets(self, since: datetime | None = None) -> list[Ticket]:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             token = await self._init_session(client)
             try:
-                params = {"range": "0-199", "expand_dropdowns": "true"}
-                r = await client.get(
-                    f"{self.base_url}/Ticket",
-                    headers=self._session_headers(token),
-                    params=params,
-                )
-                r.raise_for_status()
-                rows = r.json() or []
-
                 out: list[Ticket] = []
-                for row in rows:
+                async for row in self._paginate(
+                    client,
+                    token,
+                    "Ticket",
+                    extra_params={"expand_dropdowns": "true"},
+                ):
                     status = int(row.get("status", 0) or 0)
                     if status not in _RESOLVED_STATUSES:
                         continue
@@ -249,13 +292,12 @@ class GLPIAdapter(ITSMAdapter):
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             token = await self._init_session(client)
             try:
-                r = await client.get(
-                    f"{self.base_url}/KnowbaseItem",
-                    headers=self._session_headers(token),
-                    params={"range": "0-499", "expand_dropdowns": "true"},
-                )
-                r.raise_for_status()
-                for row in r.json() or []:
+                async for row in self._paginate(
+                    client,
+                    token,
+                    "KnowbaseItem",
+                    extra_params={"expand_dropdowns": "true"},
+                ):
                     updated = _parse_dt(row.get("date_mod"))
                     if since and updated and updated < since:
                         continue

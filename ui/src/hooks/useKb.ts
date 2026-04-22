@@ -38,7 +38,7 @@ export function useKbTopics(window: string = '30d') {
   });
 }
 
-export function useKbTickets(topic?: string, limit = 200) {
+export function useKbTickets(topic?: string, limit = 1000) {
   return useQuery({
     queryKey: ['kb', 'tickets', topic, limit],
     queryFn: () => api<KbProcessedTicket[]>('/tickets', { params: { topic, limit } }),

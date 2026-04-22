@@ -25,7 +25,7 @@ router = APIRouter()
 @router.get("/tickets")
 async def list_tickets(
     topic: str | None = None,
-    limit: int = 100,
+    limit: int = 1000,
     db: AsyncSession = Depends(get_session),
 ) -> list[dict]:
     stmt = select(ProcessedTicket)
