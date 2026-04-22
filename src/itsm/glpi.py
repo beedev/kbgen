@@ -72,6 +72,10 @@ class GLPIAdapter(ITSMAdapter):
         self.basic_user = basic_user or os.getenv("GLPI_USER") or "glpi"
         self.basic_password = basic_password or os.getenv("GLPI_PASSWORD") or "glpi"
         self._timeout = timeout
+        # Name → ITILCategory id cache. Populated lazily by
+        # `_ensure_category_id`; avoids re-listing /ITILCategory on every
+        # seeded ticket in a burst.
+        self._cat_cache: dict[str, int] = {}
 
     # ── auth helpers ────────────────────────────────────────────────────────
     def _auth_headers(self) -> dict[str, str]:
@@ -309,6 +313,60 @@ class GLPIAdapter(ITSMAdapter):
             finally:
                 await self._kill_session(client, token)
 
+    async def _ensure_category_id(
+        self, client: httpx.AsyncClient, token: str, name: str
+    ) -> int | None:
+        """Resolve an ITIL category name → id, creating it in GLPI if absent.
+
+        Mirrors `scripts/seed_glpi_healthcare._ensure_categories`. Result is
+        cached on the adapter instance so a burst of demo-seeded tickets
+        sharing a category only triggers one list + one create.
+        """
+        cached = self._cat_cache.get(name)
+        if cached is not None:
+            return cached
+        try:
+            r = await client.get(
+                f"{self.base_url}/ITILCategory",
+                headers=self._session_headers(token),
+                params={"range": "0-499"},
+            )
+            r.raise_for_status()
+            for c in r.json() or []:
+                cid = c.get("id")
+                if c.get("name") == name and cid is not None:
+                    self._cat_cache[name] = int(cid)
+                    return int(cid)
+            rc = await client.post(
+                f"{self.base_url}/ITILCategory",
+                headers=self._session_headers(token),
+                json={
+                    "input": {
+                        "name": name,
+                        "is_helpdeskvisible": 1,
+                        "is_request": 1,
+                        "is_incident": 1,
+                    }
+                },
+            )
+            if rc.status_code >= 400:
+                log.warning(
+                    "GLPI create ITILCategory '%s' failed: %s %s",
+                    name, rc.status_code, rc.text[:160],
+                )
+                return None
+            data = rc.json()
+            if isinstance(data, list):
+                data = data[0]
+            cid = data.get("id")
+            if cid is None:
+                return None
+            self._cat_cache[name] = int(cid)
+            return int(cid)
+        except Exception as exc:  # network / JSON / schema drift
+            log.warning("GLPI _ensure_category_id(%s) failed: %s", name, exc)
+            return None
+
     async def create_resolved_ticket(
         self,
         *,
@@ -329,13 +387,17 @@ class GLPIAdapter(ITSMAdapter):
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             token = await self._init_session(client)
             try:
-                payload = {
-                    "input": {
-                        "name": title,
-                        "content": f"<p>{description}</p>",
-                        "status": 1,
-                    }
+                cat_id: int | None = None
+                if category:
+                    cat_id = await self._ensure_category_id(client, token, category)
+                ticket_input: dict = {
+                    "name": title,
+                    "content": f"<p>{description}</p>",
+                    "status": 1,
                 }
+                if cat_id is not None:
+                    ticket_input["itilcategories_id"] = cat_id
+                payload = {"input": ticket_input}
                 r = await client.post(
                     f"{self.base_url}/Ticket",
                     headers=self._session_headers(token),
