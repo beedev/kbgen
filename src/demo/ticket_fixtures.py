@@ -3,7 +3,9 @@ into the ITSM so a walkthrough can show the full kbgen story:
 
   * big cluster (6)  → 1 master draft + 5 covered siblings
   * small cluster (2) → 1 master draft + 1 covered sibling
-  * near-duplicates of already-live KBs (2) → COVERED → KB N (no draft)
+  * near-duplicate of an already-live KB (1) → COVERED → KB N (no draft)
+  * gap ticket (1) — no resolution, unrelated category → SKIPPED,
+    exercisable via the gap-RAG "generate KB" action
 
 Successive button clicks rotate through packs so the demo doesn't just
 produce more copies of the same theme. Each pack appends a short batch
@@ -108,18 +110,21 @@ _PACK_A = DemoPack(
             description="Patients who reset their MyChart password last night get 'Access denied' on login today.",
             resolution=_MYCHART_RES,
         ),
-        # Near-dup of live KB — MFA enrollment for new phlebotomists (2)
+        # Near-dup of live KB — MFA enrollment for new phlebotomists (1)
         DemoTicket(
             category="Provisioning",
             title="MFA enrollment blocked for new phlebotomists starting this week (case #04)",
             description="New phlebotomy hires cannot enroll in Okta Verify — they hit a 'user not in group' error.",
             resolution="Added the new phlebotomists to the Okta group 'healthcare_mfa_required'. Confirmed enrollment through a test account. Group membership syncs via SCIM every 5 minutes.",
         ),
+        # Gap ticket (1) — no resolution, unrelated category → SKIPPED.
+        # Kept intentionally off-theme from the Zoom/MyChart siblings so it
+        # won't accidentally get pulled into their clusters.
         DemoTicket(
-            category="Provisioning",
-            title="New phlebotomist cohort — Okta Verify enrollment fails 'user not in group'",
-            description="Another batch of phlebotomy new-hires blocked at Okta Verify enrollment with the 'user not in group' error.",
-            resolution="Added the users to Okta group 'healthcare_mfa_required'. SCIM sync picked them up within 5 min. Verified enrollment on one account end-to-end.",
+            category="Biomedical Engineering",
+            title="Telemetry transmitter pairing failure on 6-East",
+            description="TX units on 6-East intermittently fail to pair with receivers after reboot. No fix yet; nurses rotating to spare units.",
+            resolution="",
         ),
     ],
 )
@@ -193,18 +198,19 @@ _PACK_B = DemoPack(
             description="Oncology pharmacy cabinet denies override authentications after the 1.16.4 firmware.",
             resolution=_PYXIS_RES,
         ),
-        # Near-dup of live KB — WiFi cert expiry on clinical laptops (2)
+        # Near-dup of live KB — WiFi cert expiry on clinical laptops (1)
         DemoTicket(
             category="Infrastructure",
             title="WiFi certificate expired on clinical laptops — floor 5 reports no network (case #04)",
             description="Clinical laptops on floor 5 lost WiFi this morning. The 802.1x cert chain expired.",
             resolution="Issued fresh device certs from the internal PKI, pushed via Intune to the affected laptop group. Rebooted one as a sanity check — connected on first try. Full fleet remediation completed in 90 minutes.",
         ),
+        # Gap ticket (1) — no resolution, unrelated category → SKIPPED.
         DemoTicket(
-            category="Infrastructure",
-            title="Clinical laptops fleet dropped off WiFi — certificate chain expired",
-            description="Multiple clinical laptops across units dropped off corporate WiFi; the 802.1x handshake is failing with expired cert.",
-            resolution="Internal PKI cert chain had expired. Renewed the intermediate, re-issued device certs, pushed via Intune. Laptops back on the network once the new chain propagated.",
+            category="Research Informatics",
+            title="REDCap data pull failing for IRB 2024-112",
+            description="Nightly extract for IRB 2024-112 errors out with no log output. Research team blocked on cohort refresh.",
+            resolution="",
         ),
     ],
 )
@@ -279,18 +285,19 @@ _PACK_C = DemoPack(
             description="Subscription we use for real-time Patient updates disabled itself after 3 webhook 502s overnight.",
             resolution=_FHIR_SUB_RES,
         ),
-        # Near-dup of live KB — MFA variant (2)
+        # Near-dup of live KB — MFA variant (1)
         DemoTicket(
             category="Provisioning",
             title="MFA enrollment blocked for new phlebotomy hires — 'user not in group' (case #05)",
             description="Another phlebotomy cohort blocked at Okta Verify with 'user not in group'.",
             resolution="Added the hires to Okta group 'healthcare_mfa_required'. SCIM sync completed within 5 min. Enrollment succeeded after that.",
         ),
+        # Gap ticket (1) — no resolution, unrelated category → SKIPPED.
         DemoTicket(
-            category="Provisioning",
-            title="Onboarding — phlebotomist cannot complete Okta Verify setup",
-            description="Single phlebotomist onboarding this week unable to enroll in Okta Verify — 'user not in group' error.",
-            resolution="Needed to be placed in 'healthcare_mfa_required'. Did so, SCIM pushed the membership, enrollment worked next try.",
+            category="Devices",
+            title="Glucometer readings not appearing in EHR for bed 12B",
+            description="Vitals missing for bed 12B since 07:00. Device shows readings locally but they never reach the EHR.",
+            resolution="",
         ),
     ],
 )
