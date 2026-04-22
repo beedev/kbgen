@@ -1,0 +1,43 @@
+networks:
+  dxp-net:
+    name: dxp_dxp-net
+    external: true
+
+services:
+  glpi-db:
+    image: mariadb:10.11
+    container_name: dxp-glpi-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: glpi_root_2026
+      MARIADB_DATABASE: glpidb
+      MARIADB_USER: glpi
+      MARIADB_PASSWORD: glpi_dev_2026
+    volumes:
+      - dxp-glpi-db:/var/lib/mysql
+    networks: [dxp-net]
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -uglpi -pglpi_dev_2026 -e 'SELECT 1' glpidb"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  glpi:
+    image: diouxx/glpi:latest
+    platform: linux/amd64   # diouxx/glpi is amd64-only — Rosetta emulates on Apple Silicon
+    container_name: dxp-glpi
+    restart: unless-stopped
+    depends_on:
+      glpi-db:
+        condition: service_healthy
+    ports:
+      - "9080:80"
+    environment:
+      TIMEZONE: UTC
+    volumes:
+      - dxp-glpi-data:/var/www/html/glpi
+    networks: [dxp-net]
+
+volumes:
+  dxp-glpi-db:
+  dxp-glpi-data:

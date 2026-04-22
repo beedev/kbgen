@@ -1,0 +1,23 @@
+services:
+  # Shared Postgres with pgvector — this is the same agentic_commerce DB the
+  # conversational-assistant uses. kbgen owns the `kb` schema in it.
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: kbgen-postgres
+    environment:
+      POSTGRES_DB: agentic_commerce
+      POSTGRES_USER: agentic
+      POSTGRES_PASSWORD: agentic_dev_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - kbgen-pgdata:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentic -d agentic_commerce"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  kbgen-pgdata:

@@ -1,0 +1,17 @@
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+ui/node_modules
+ui/dist
+src/static/dist
+docker
+tests
+scripts
+.env
+.env.*
+*.log

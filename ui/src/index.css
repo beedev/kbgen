@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens. Independent from any dxp variable set — the CSS prefix
+   (--kbgen-*) makes the boundary explicit. */
+:root {
+  --kbgen-brand:        #2563EB;
+  --kbgen-brand-dark:   #1D4ED8;
+  --kbgen-brand-light:  #EFF6FF;
+  --kbgen-text:         #0F172A;
+  --kbgen-text-secondary: #475569;
+  --kbgen-text-muted:   #94A3B8;
+  --kbgen-surface:      #FFFFFF;
+  --kbgen-bg:           #F9FAFB;
+  --kbgen-border:       #E2E8F0;
+  --kbgen-border-light: #F1F5F9;
+  --kbgen-success:      #059669;
+  --kbgen-warning:      #D97706;
+  --kbgen-danger:       #DC2626;
+  --kbgen-info:         #2563EB;
+  --kbgen-radius:       0.5rem;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--kbgen-bg);
+  color: var(--kbgen-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* tabular numerics everywhere the UI shows counters / scores */
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* scrollbars that don't look like Windows 98 in dark content */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--kbgen-border);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--kbgen-text-muted); }

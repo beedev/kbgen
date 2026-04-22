@@ -1,0 +1,97 @@
+# kbgen — single-stack demo deploy.
+#
+# Bundled:   kbgen app, GLPI (pre-configured), GLPI's own MariaDB
+# External:  Postgres with pgvector (DATABASE_URL), OpenAI key
+#
+# Usage:
+#   export DATABASE_URL='postgresql+asyncpg://user:pass@pg-host:5432/kbgen'
+#   export OPENAI_API_KEY='sk-...'
+#   docker compose up -d
+#   open http://localhost:8004
+#
+# For production bring-your-own-ITSM: set ITSM_ADAPTER, GLPI_URL, creds in
+# kbgen's environment and skip the bundled glpi/glpi-db services.
+
+services:
+  glpi-db:
+    image: mariadb:10.11
+    container_name: kbgen-glpi-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: glpi_root_2026
+      MARIADB_DATABASE: glpidb
+      MARIADB_USER: glpi
+      MARIADB_PASSWORD: glpi_dev_2026
+    volumes:
+      - glpi-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -uglpi -pglpi_dev_2026 -e 'SELECT 1' glpidb"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  glpi:
+    build: ./docker/glpi-preconfigured
+    platform: linux/amd64
+    container_name: kbgen-glpi
+    restart: unless-stopped
+    depends_on:
+      glpi-db:
+        condition: service_healthy
+    ports:
+      - "9080:80"   # expose the admin UI; kbgen talks internally via `http://glpi`
+    volumes:
+      - glpi-data:/var/www/html/glpi
+    environment:
+      GLPI_DB_HOST: glpi-db
+      GLPI_DB_PORT: 3306
+      GLPI_DB_NAME: glpidb
+      GLPI_DB_USER: glpi
+      GLPI_DB_PASSWORD: glpi_dev_2026
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -u glpi:glpi http://localhost/apirest.php/initSession || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  kbgen:
+    build: .
+    container_name: kbgen-app
+    restart: unless-stopped
+    depends_on:
+      glpi:
+        condition: service_healthy
+    ports:
+      - "8004:8004"
+    environment:
+      # ── Customer-provided (REQUIRED) ───────────────────────────────
+      DATABASE_URL: ${DATABASE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+      # ── Pre-wired to the bundled GLPI ──────────────────────────────
+      ITSM_ADAPTER: glpi
+      GLPI_URL: http://glpi/apirest.php
+      GLPI_USER: glpi
+      GLPI_PASSWORD: glpi
+
+      # ── Runtime tuning (safe defaults) ─────────────────────────────
+      POLL_INTERVAL_S: "60"
+      DEDUP_THRESHOLD: "0.82"
+      CHUNK_SIZE_TOKENS: "500"
+      CHUNK_OVERLAP: "60"
+
+      # ── First-boot behaviour ───────────────────────────────────────
+      # Seed the bundled GLPI with 135 healthcare tickets on first boot so
+      # the UI has something to show. Flip to "false" for production.
+      AUTO_SEED_ITSM: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8004/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  glpi-data:
+  glpi-db-data:
