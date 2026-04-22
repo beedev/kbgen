@@ -141,6 +141,24 @@ export function useTriggerKbImport() {
   });
 }
 
+// ── Demo seeder ──────────────────────────────────────────────────────────
+export interface KbSeedDemoResult {
+  theme: string;
+  narrative: string;
+  seeded: number;
+  requested: number;
+  ticket_ids: string[];
+  errors: string[];
+}
+
+export function useSeedDemoTickets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<KbSeedDemoResult>('/admin/seed-demo', { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
+  });
+}
+
 // ── Settings ─────────────────────────────────────────────────────────────
 export function useKbSettings() {
   return useQuery({

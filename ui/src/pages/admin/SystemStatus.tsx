@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { useToast } from '../../components/Toaster';
 import {
   useKbSettings,
   useKbStats,
+  useSeedDemoTickets,
   useTestKbConnection,
   useTriggerKbImport,
   useTriggerKbPoll,
@@ -17,7 +19,9 @@ export function SystemStatus() {
   const test = useTestKbConnection();
   const poll = useTriggerKbPoll();
   const importKb = useTriggerKbImport();
+  const seedDemo = useSeedDemoTickets();
   const update = useUpdateKbSettings();
+  const toast = useToast();
   const [itsmStatus, setItsmStatus] = useState<string | null>(null);
   const [pollInterval, setPollInterval] = useState<number | undefined>();
   const [dedupThreshold, setDedupThreshold] = useState<number | undefined>();
@@ -110,6 +114,74 @@ export function SystemStatus() {
       </div>
 
       <Card>
+        <div className="p-5 space-y-3 bg-[var(--kbgen-brand-light)]/40 rounded-lg border border-[var(--kbgen-brand)]/20">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-[var(--kbgen-text)]">Demo seeder</h3>
+            <Badge tone="brand">walkthrough</Badge>
+          </div>
+          <p className="text-xs text-[var(--kbgen-text-secondary)] leading-relaxed">
+            Drops <strong>10 themed resolved tickets</strong> into the ITSM so the whole
+            kbgen story plays out on one screen. Each batch mixes:
+          </p>
+          <ul className="text-xs text-[var(--kbgen-text-secondary)] list-disc pl-5 space-y-0.5">
+            <li>
+              A large cluster → 1 <strong>★ Master draft</strong> + several{' '}
+              <strong>COVERED · master needs review</strong> siblings.
+            </li>
+            <li>
+              A smaller cluster → another master drafts its own article.
+            </li>
+            <li>
+              A couple of tickets similar to already-live KBs → they land as{' '}
+              <strong>COVERED → KB N</strong> with no new draft (dedup in action).
+            </li>
+          </ul>
+          <p className="text-xs text-[var(--kbgen-text-muted)] leading-relaxed">
+            Demo flow: <strong>Seed demo tickets</strong> → <strong>Run poll cycle</strong>{' '}
+            → open <strong>Workspace</strong> → click a master row → <strong>Approve &amp; Push</strong>.
+            Successive clicks rotate through themed packs.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={async () => {
+                try {
+                  const r = await seedDemo.mutateAsync();
+                  toast.push(
+                    'success',
+                    `Seeded ${r.seeded}/${r.requested} tickets (theme: ${r.theme}). Now click "Run poll cycle".`,
+                    7000,
+                  );
+                } catch (err) {
+                  toast.push('error', `Seed failed: ${String(err)}`);
+                }
+              }}
+              disabled={seedDemo.isPending}
+            >
+              {seedDemo.isPending ? 'Seeding…' : 'Seed demo tickets (+10)'}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                try {
+                  const r = await poll.mutateAsync();
+                  toast.push(
+                    'success',
+                    `Poll complete — processed ${r.processed}, drafted ${r.drafted}, covered ${r.covered}, skipped ${r.skipped}.`,
+                    7000,
+                  );
+                } catch (err) {
+                  toast.push('error', `Poll failed: ${String(err)}`);
+                }
+              }}
+              disabled={poll.isPending}
+            >
+              {poll.isPending ? 'Polling…' : 'Run poll cycle now'}
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
         <div className="p-5 space-y-3">
           <h3 className="text-sm font-bold text-[var(--kbgen-text)]">Pipeline actions</h3>
           <p className="text-xs text-[var(--kbgen-text-muted)]">
@@ -123,9 +195,6 @@ export function SystemStatus() {
               disabled={importKb.isPending}
             >
               {importKb.isPending ? 'Importing…' : 'Import existing KB from ITSM'}
-            </Button>
-            <Button onClick={() => poll.mutate()} disabled={poll.isPending}>
-              {poll.isPending ? 'Polling…' : 'Run poll cycle now'}
             </Button>
           </div>
         </div>

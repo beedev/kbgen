@@ -113,3 +113,27 @@ class MockITSMAdapter(ITSMAdapter):
 
     async def test_connection(self) -> tuple[bool, str]:
         return True, "mock adapter — always healthy"
+
+    async def create_resolved_ticket(
+        self,
+        *,
+        title: str,
+        description: str,
+        resolution: str,
+        category: str | None = None,
+    ) -> str | None:
+        tid = f"MOCK-{uuid.uuid4().hex[:6].upper()}"
+        self._tickets.append(
+            Ticket(
+                itsm_ticket_id=tid,
+                itsm_provider=self.name,
+                title=title,
+                description=description,
+                conversation=[],
+                resolution=resolution,
+                topic=category,
+                tags=[],
+                resolved_at=datetime.now(timezone.utc),
+            )
+        )
+        return tid

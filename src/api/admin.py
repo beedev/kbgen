@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.demo.ticket_fixtures import next_pack
 from src.itsm import get_adapter
 from src.storage.db import get_session
 from src.storage.models import Article, Chunk, ProcessedTicket, PushLog, TopicSnapshot
@@ -113,5 +114,50 @@ async def relink_kb_to_tickets(db: AsyncSession = Depends(get_session)) -> dict:
         "articles_processed": len(articles),
         "articles_linked": articles_linked,
         "links_created": links_created,
+        "errors": errors[:20],
+    }
+
+
+@router.post("/admin/seed-demo")
+async def seed_demo_tickets() -> dict:
+    """Drop the next demo fixture pack (10 themed tickets) into the ITSM.
+
+    Rotates through curated packs on each call so successive demos show
+    different stories. Every pack mixes:
+      * a large themed cluster that will become 1 master draft + N-1 covered
+      * a smaller cluster that drafts its own master
+      * a couple of near-duplicates of already-live KBs that show up as
+        COVERED → KB N in Workspace (no new draft needed)
+
+    Next poll cycle will pick these up and produce drafts; the caller should
+    trigger a poll immediately after to keep the demo tight.
+    """
+    adapter = get_adapter()
+    pack = next_pack()
+
+    created_ids: list[str] = []
+    errors: list[str] = []
+    for t in pack.tickets:
+        try:
+            tid = await adapter.create_resolved_ticket(
+                title=t.title,
+                description=t.description,
+                resolution=t.resolution,
+                category=t.category,
+            )
+            if tid:
+                created_ids.append(tid)
+            else:
+                errors.append(f"{t.title}: adapter returned no id")
+        except Exception as exc:
+            errors.append(f"{t.title}: {exc.__class__.__name__}: {exc}")
+            log.warning("seed-demo create_resolved_ticket failed: %s", exc)
+
+    return {
+        "theme": pack.theme,
+        "narrative": pack.narrative,
+        "seeded": len(created_ids),
+        "requested": len(pack.tickets),
+        "ticket_ids": created_ids,
         "errors": errors[:20],
     }

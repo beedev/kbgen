@@ -3,7 +3,6 @@ import { PageLayout, type NavItem } from './components/PageLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Workspace } from './pages/Workspace';
 import { SearchPage } from './pages/Search';
-import { Mvp2Placeholder } from './pages/Mvp2Placeholder';
 import { SystemStatus } from './pages/admin/SystemStatus';
 
 type Persona = 'operator' | 'admin';
@@ -16,19 +15,11 @@ const operatorNav: NavItem[] = [
 
 const adminNav: NavItem[] = [{ label: 'System Status', href: '/admin' }];
 
-const mvp2Nav: NavItem[] = [
-  { label: 'Coming in MVP2', href: '#mvp2', section: true },
-  { label: 'Gap Fixing', href: '/mvp2/gap', disabled: true },
-  { label: 'KB Health Monitor', href: '/mvp2/health', disabled: true },
-  { label: 'Staleness Alerts', href: '/mvp2/staleness', disabled: true },
-];
-
 function renderPage(path: string, navigate: (p: string) => void): React.ReactNode {
   if (path === '/') return <Dashboard onNavigate={navigate} />;
   if (path === '/workspace') return <Workspace />;
   if (path === '/search') return <SearchPage />;
   if (path === '/admin') return <SystemStatus />;
-  if (path.startsWith('/mvp2/')) return <Mvp2Placeholder path={path} />;
   return (
     <div className="p-8 text-[var(--kbgen-text-secondary)]">Page not found: {path}</div>
   );
@@ -104,7 +95,7 @@ export function App() {
   }, []);
 
   const primary = persona === 'admin' ? adminNav : operatorNav;
-  const nav: NavItem[] = [...primary, ...mvp2Nav].map((item) => ({
+  const nav: NavItem[] = primary.map((item) => ({
     ...item,
     active: item.href === currentPath,
   }));

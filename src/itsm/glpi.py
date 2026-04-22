@@ -309,6 +309,88 @@ class GLPIAdapter(ITSMAdapter):
             finally:
                 await self._kill_session(client, token)
 
+    async def create_resolved_ticket(
+        self,
+        *,
+        title: str,
+        description: str,
+        resolution: str,
+        category: str | None = None,
+    ) -> str | None:
+        """Create → post solution → close, matching scripts/seed_glpi_healthcare.
+
+        GLPI won't let you POST a ticket directly at status=6; it has to
+        walk the state machine. We do: (1) POST Ticket status=1, (2) POST
+        ITILSolution which auto-moves status→5, (3) PUT status=6 with
+        solvedate/closedate = now.
+        """
+        from datetime import timezone as _tz
+        now_str = datetime.now(_tz.utc).strftime("%Y-%m-%d %H:%M:%S")
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            token = await self._init_session(client)
+            try:
+                payload = {
+                    "input": {
+                        "name": title,
+                        "content": f"<p>{description}</p>",
+                        "status": 1,
+                    }
+                }
+                r = await client.post(
+                    f"{self.base_url}/Ticket",
+                    headers=self._session_headers(token),
+                    json=payload,
+                )
+                if r.status_code >= 400:
+                    log.warning("GLPI create Ticket failed: %s %s", r.status_code, r.text[:200])
+                    return None
+                data = r.json()
+                if isinstance(data, list):
+                    data = data[0]
+                tid = data.get("id")
+                if not tid:
+                    return None
+
+                sol_payload = {
+                    "input": {
+                        "itemtype": "Ticket",
+                        "items_id": tid,
+                        "content": f"<p>{resolution}</p>",
+                    }
+                }
+                sr = await client.post(
+                    f"{self.base_url}/ITILSolution",
+                    headers=self._session_headers(token),
+                    json=sol_payload,
+                )
+                if sr.status_code >= 400:
+                    log.warning(
+                        "GLPI post ITILSolution for ticket %s failed: %s %s",
+                        tid, sr.status_code, sr.text[:200],
+                    )
+
+                close_payload = {
+                    "input": {
+                        "id": tid,
+                        "status": 6,
+                        "solvedate": now_str,
+                        "closedate": now_str,
+                    }
+                }
+                cr = await client.put(
+                    f"{self.base_url}/Ticket/{tid}",
+                    headers=self._session_headers(token),
+                    json=close_payload,
+                )
+                if cr.status_code >= 400:
+                    log.warning(
+                        "GLPI close ticket %s failed: %s %s",
+                        tid, cr.status_code, cr.text[:200],
+                    )
+                return str(tid)
+            finally:
+                await self._kill_session(client, token)
+
     async def link_kb_to_ticket(self, *, itsm_kb_id: str, itsm_ticket_id: str) -> bool:
         """Create a glpi_knowbaseitems_items row so the ticket's KB tab shows it.
 

@@ -70,6 +70,23 @@ class ITSMAdapter(ABC):
         """
         return False
 
+    async def create_resolved_ticket(
+        self,
+        *,
+        title: str,
+        description: str,
+        resolution: str,
+        category: str | None = None,
+    ) -> str | None:
+        """Create a new ticket in a 'resolved' state for demo seeding.
+
+        Default returns None — adapters that can't synthesize tickets skip.
+        The intent is to drop a fresh ticket + resolution into the ITSM so
+        the kbgen pipeline picks it up on the next poll. Returns the ITSM
+        ticket id on success.
+        """
+        return None
+
     @abstractmethod
     async def test_connection(self) -> tuple[bool, str]:
         """Return (ok, human-readable status)."""
