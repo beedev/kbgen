@@ -19,6 +19,7 @@ ENV GLPI_DB_HOST=glpi-db \
     GLPI_DB_NAME=glpidb \
     GLPI_DB_USER=glpi \
     GLPI_DB_PASSWORD=glpi_dev_2026 \
+    VERSION_GLPI=10.0.24 \
     GLPI_ADMIN_USER=glpi \
     GLPI_ADMIN_PASSWORD=glpi
 

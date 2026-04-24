@@ -64,7 +64,10 @@ services:
     #     args:
     #       BASE_PATH: /kbgen
     # See the "Reverse-proxy deployment" section in README.md for nginx config.
-    build: .
+    build:
+      context: .
+      args:
+        BASE_PATH: /kbgen
     container_name: kbgen-app
     restart: unless-stopped
     depends_on:

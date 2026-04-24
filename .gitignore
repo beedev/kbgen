@@ -49,3 +49,4 @@ context/
 
 # ── Claude Code local settings ───────────────────────────────────────
 .claude/
+AGENTS.md
